@@ -19,9 +19,9 @@ export default function LinkedInPostForm() {
     const formData = new FormData(e.currentTarget);
 
     try {
-      // Set a longer timeout for image generation
+      // Set timeout shorter than Cloudflare's limit
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 minutes
+      const timeoutId = setTimeout(() => controller.abort(), 90 * 1000); // 90 seconds
 
       toast.info("Starting image generation... This may take a few minutes.");
 
