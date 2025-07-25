@@ -20,11 +20,11 @@ export default function LinkedInPostForm() {
     const formData = new FormData(e.currentTarget);
 
     try {
-      // Set timeout to 5 minutes for image generation
+      // Set timeout under Cloudflare's 100-second limit
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 minutes
+      const timeoutId = setTimeout(() => controller.abort(), 90 * 1000); // 90 seconds
 
-      toast.info("Starting image generation... This may take up to 5 minutes.");
+      toast.info("Starting image generation... This may take a few minutes.");
 
       const response = await fetch(
         "https://zylo-11.app.n8n.cloud/webhook-test/97b30150-ecdc-42cb-8148-1cab2445cb01",
