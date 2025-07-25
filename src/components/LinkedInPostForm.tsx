@@ -9,22 +9,22 @@ export default function LinkedInPostForm() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setSuccess(false);
-    setError(null);
-    setImageUrl(null);
-
-    const formData = new FormData(e.currentTarget);
-
+  const makeRequest = async (formData: FormData, attempt: number = 1): Promise<void> => {
+    const maxRetries = 3;
+    const retryDelay = attempt * 2000; // 2s, 4s, 6s
+    
     try {
-      // Set timeout to 5 minutes for image generation
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 minutes
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
 
-      toast.info("Starting image generation... This may take up to 5 minutes.");
+      if (attempt === 1) {
+        toast.info("Starting image generation... This may take up to 5 minutes.");
+      } else {
+        toast.info(`Retry attempt ${attempt}/${maxRetries}...`);
+      }
 
       const response = await fetch(
         "https://zylo-11.app.n8n.cloud/webhook-test/97b30150-ecdc-42cb-8148-1cab2445cb01",
@@ -38,58 +38,85 @@ export default function LinkedInPostForm() {
       clearTimeout(timeoutId);
 
       if (response.ok) {
-        // Always try to treat as binary first since n8n returns binary
         try {
           const imageBlob = await response.blob();
           
-          // Validate it's actually an image by checking blob type or size
           if (imageBlob.size > 0 && (imageBlob.type.startsWith('image/') || imageBlob.size > 1000)) {
             const imageObjectUrl = URL.createObjectURL(imageBlob);
             setImageUrl(imageObjectUrl);
             setSuccess(true);
+            setRetryCount(0);
             toast.success("Image generated successfully!");
-            e.currentTarget.reset();
+            return;
           } else {
-            // If blob is too small or not an image, try parsing as text/JSON
             const text = await imageBlob.text();
             console.log('Unexpected response:', text);
-            setError("Generated content is not a valid image. Please try again.");
-            toast.error("Invalid image response");
+            throw new Error("Generated content is not a valid image");
           }
         } catch (blobError) {
           console.error("Error processing response as blob:", blobError);
-          setError("Failed to process the generated image. Please try again.");
-          toast.error("Image processing failed");
+          throw new Error("Failed to process the generated image");
         }
       } else {
         const statusText = response.statusText || "Unknown error";
         console.error(`HTTP ${response.status}: ${statusText}`);
         
+        // For 524 and 503 errors, retry automatically if we haven't exceeded max retries
+        if ((response.status === 524 || response.status === 503) && attempt < maxRetries) {
+          toast.info(`${response.status === 524 ? 'Cloudflare timeout' : 'Service busy'} - retrying in ${retryDelay/1000}s...`);
+          setRetryCount(attempt);
+          setIsRetrying(true);
+          
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          setIsRetrying(false);
+          return await makeRequest(formData, attempt + 1);
+        }
+        
+        // Final error handling
         if (response.status === 524) {
-          setError("Cloudflare timeout occurred (524). The image may still be generating. Please wait 2-3 minutes and try downloading manually, or submit a new request.");
-          toast.error("Cloudflare timeout - image may still be processing");
+          throw new Error("Cloudflare timeout occurred. The image may still be generating on the server. Please try again in a few minutes.");
         } else if (response.status === 503) {
-          setError("Service is temporarily busy. Please wait a moment and try again.");
-          toast.error("Service busy - please retry");
+          throw new Error("Service is temporarily busy. Please wait a moment and try again.");
         } else if (response.status === 502) {
-          setError("Service temporarily unavailable. Please try again in a few moments.");
-          toast.error("Service unavailable - please retry");
+          throw new Error("Service temporarily unavailable. Please try again in a few moments.");
         } else {
-          setError(`Request failed (${response.status}): ${statusText}. Please try again.`);
-          toast.error("Generation failed - please retry");
+          throw new Error(`Request failed (${response.status}): ${statusText}. Please try again.`);
         }
       }
     } catch (err: any) {
       console.error("Request error:", err);
+      
       if (err.name === 'AbortError') {
-        setError("Request timed out after 5 minutes. The image generation may be taking longer than expected.");
-        toast.error("Request timed out - please try again");
+        throw new Error("Request timed out after 5 minutes. The image generation may be taking longer than expected.");
+      } else if (err.message.includes('Cloudflare timeout') || err.message.includes('Service is temporarily busy')) {
+        throw err; // Re-throw our custom errors
       } else {
-        setError("Network error occurred. Please check your connection and try again.");
-        toast.error("Network error - please try again");
+        throw new Error("Network error occurred. Please check your connection and try again.");
       }
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setSuccess(false);
+    setError(null);
+    setImageUrl(null);
+    setRetryCount(0);
+    setIsRetrying(false);
+
+    const formData = new FormData(e.currentTarget);
+
+    try {
+      await makeRequest(formData);
+      e.currentTarget.reset();
+    } catch (err: any) {
+      setError(err.message);
+      toast.error("Generation failed");
     } finally {
       setIsSubmitting(false);
+      setIsRetrying(false);
+      setRetryCount(0);
     }
   };
 
@@ -179,7 +206,9 @@ export default function LinkedInPostForm() {
             className="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Generating Image..." : "Generate LinkedIn Post"}
+            {isSubmitting ? (
+              isRetrying ? `Retrying... (${retryCount}/3)` : "Generating Image..."
+            ) : "Generate LinkedIn Post"}
           </button>
 
           {success && (
