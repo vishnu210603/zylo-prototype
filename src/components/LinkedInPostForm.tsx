@@ -20,11 +20,11 @@ export default function LinkedInPostForm() {
     const formData = new FormData(e.currentTarget);
 
     try {
-      // Set timeout to 5 minutes for image generation
+      // Set timeout under Cloudflare's 100-second limit
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 minutes
+      const timeoutId = setTimeout(() => controller.abort(), 90 * 1000); // 90 seconds
 
-      toast.info("Starting image generation... This may take up to 5 minutes.");
+      toast.info("Starting image generation... This may take a few minutes.");
 
       const response = await fetch(
         "https://zylo-11.app.n8n.cloud/webhook-test/97b30150-ecdc-42cb-8148-1cab2445cb01",
@@ -38,44 +38,45 @@ export default function LinkedInPostForm() {
       clearTimeout(timeoutId);
 
       if (response.ok) {
-        // Check if the response is an image
-        const contentType = response.headers.get("content-type");
-        
-        if (contentType && contentType.startsWith("image/")) {
-          // Handle binary image response
+        // Always try to treat as binary first since n8n returns binary
+        try {
           const imageBlob = await response.blob();
-          const imageObjectUrl = URL.createObjectURL(imageBlob);
-          setImageUrl(imageObjectUrl);
-          setSuccess(true);
-          toast.success("Image generated successfully!");
-          e.currentTarget.reset();
-        } else {
-          // Try to parse as JSON in case of error response
-          try {
-            const data = await response.json();
-            console.log('Webhook response:', data);
-            setError("Unexpected response format. Please try again.");
-          } catch {
-            // If it's not JSON either, treat as binary
-            const imageBlob = await response.blob();
+          
+          // Validate it's actually an image by checking blob type or size
+          if (imageBlob.size > 0 && (imageBlob.type.startsWith('image/') || imageBlob.size > 1000)) {
             const imageObjectUrl = URL.createObjectURL(imageBlob);
             setImageUrl(imageObjectUrl);
             setSuccess(true);
             toast.success("Image generated successfully!");
             e.currentTarget.reset();
+          } else {
+            // If blob is too small or not an image, try parsing as text/JSON
+            const text = await imageBlob.text();
+            console.log('Unexpected response:', text);
+            setError("Generated content is not a valid image. Please try again.");
+            toast.error("Invalid image response");
           }
+        } catch (blobError) {
+          console.error("Error processing response as blob:", blobError);
+          setError("Failed to process the generated image. Please try again.");
+          toast.error("Image processing failed");
         }
       } else {
         const statusText = response.statusText || "Unknown error";
+        console.error(`HTTP ${response.status}: ${statusText}`);
+        
         if (response.status === 524) {
-          setError("The image generation is taking longer than expected. Please try again or check if your request parameters are correct.");
-          toast.error("Request timeout - please try again with simpler parameters");
+          setError("Request timed out. The image generation is taking too long. Please try again with simpler parameters.");
+          toast.error("Timeout - try simpler parameters");
+        } else if (response.status === 503) {
+          setError("Service is temporarily busy. Please wait a moment and try again.");
+          toast.error("Service busy - please retry");
         } else if (response.status === 502) {
           setError("Service temporarily unavailable. Please try again in a few moments.");
-          toast.error("Service unavailable - please try again");
+          toast.error("Service unavailable - please retry");
         } else {
-          setError(`Request failed (${response.status}): ${statusText}`);
-          toast.error("Generation failed - please try again");
+          setError(`Request failed (${response.status}): ${statusText}. Please try again.`);
+          toast.error("Generation failed - please retry");
         }
       }
     } catch (err: any) {
