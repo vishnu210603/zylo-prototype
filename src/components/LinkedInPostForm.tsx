@@ -66,8 +66,8 @@ export default function LinkedInPostForm() {
         console.error(`HTTP ${response.status}: ${statusText}`);
         
         if (response.status === 524) {
-          setError("Request timed out. The image generation is taking too long. Please try again with simpler parameters.");
-          toast.error("Timeout - try simpler parameters");
+          setError("Cloudflare timeout occurred (524). The image may still be generating. Please wait 2-3 minutes and try downloading manually, or submit a new request.");
+          toast.error("Cloudflare timeout - image may still be processing");
         } else if (response.status === 503) {
           setError("Service is temporarily busy. Please wait a moment and try again.");
           toast.error("Service busy - please retry");
