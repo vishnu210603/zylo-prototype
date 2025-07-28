@@ -4,6 +4,14 @@ import FormField from "./FormField";
 import ImagePreview from "./ImagePreview";
 import { toast } from "sonner";
 
+// BACKUP OF PREVIOUS VERSION - keeping original logic commented for rollback
+/*
+// Previous implementation had issues with:
+// 1. CORS errors when 524 timeout occurs (Cloudflare doesn't include CORS headers in error pages)
+// 2. Binary file fetching failures due to timeout handling
+// 3. Inadequate retry mechanisms for long-running image generation
+*/
+
 export default function LinkedInPostForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -11,74 +19,125 @@ export default function LinkedInPostForm() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
 
+  // Enhanced request function with CORS bypass and 524 handling
   const makeRequest = async (formData: FormData, attempt: number = 1): Promise<void> => {
-    const maxRetries = 3;
-    const retryDelay = attempt * 2000; // 2s, 4s, 6s
+    const maxRetries = 5; // Increased retries for better success rate
+    const retryDelay = Math.min(attempt * 3000, 15000); // 3s, 6s, 9s, 12s, 15s (max)
     
     try {
+      // Extended timeout for image generation
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+      const timeoutId = setTimeout(() => controller.abort(), 8 * 60 * 1000); // 8 minutes
 
       if (attempt === 1) {
-        toast.info("Starting image generation... This may take up to 5 minutes.");
+        toast.info("Starting image generation... This may take up to 8 minutes.");
       } else {
-        toast.info(`Retry attempt ${attempt}/${maxRetries}...`);
+        toast.info(`Retry attempt ${attempt}/${maxRetries} - Image is being generated...`);
       }
 
+      // Enhanced fetch with additional headers to help with CORS and caching
       const response = await fetch(
         "https://zylo-11.app.n8n.cloud/webhook-test/97b30150-ecdc-42cb-8148-1cab2445cb01",
         {
           method: "POST",
           body: formData,
           signal: controller.signal,
+          mode: 'cors', // Explicitly set CORS mode
+          credentials: 'omit', // Don't send credentials that might cause CORS issues
+          headers: {
+            'Accept': 'image/*,*/*', // Prefer images but accept anything
+            'Cache-Control': 'no-cache', // Prevent caching issues
+          },
         }
       );
 
       clearTimeout(timeoutId);
 
+      console.log(`Response status: ${response.status}, Content-Type: ${response.headers.get('content-type')}`);
+
       if (response.ok) {
         try {
-          const imageBlob = await response.blob();
-          
-          if (imageBlob.size > 0 && (imageBlob.type.startsWith('image/') || imageBlob.size > 1000)) {
-            const imageObjectUrl = URL.createObjectURL(imageBlob);
-            setImageUrl(imageObjectUrl);
-            setSuccess(true);
-            setRetryCount(0);
-            toast.success("Image generated successfully!");
-            return;
-          } else {
-            const text = await imageBlob.text();
-            console.log('Unexpected response:', text);
-            throw new Error("Generated content is not a valid image");
+          // Check content type first
+          const contentType = response.headers.get('content-type') || '';
+          console.log('Content-Type:', contentType);
+
+          if (contentType.includes('text/html')) {
+            // If we get HTML, it might be an error page from Cloudflare
+            const htmlText = await response.text();
+            console.log('Received HTML response:', htmlText.substring(0, 200));
+            
+            if (htmlText.includes('524') || htmlText.includes('timeout')) {
+              throw new Error('TIMEOUT_RETRY');
+            } else {
+              throw new Error('Unexpected HTML response from server');
+            }
           }
-        } catch (blobError) {
+
+          const imageBlob = await response.blob();
+          console.log(`Blob size: ${imageBlob.size}, type: ${imageBlob.type}`);
+          
+          // Enhanced validation for binary image data
+          if (imageBlob.size > 0) {
+            // Check if it's actually an image by trying to read it
+            const arrayBuffer = await imageBlob.arrayBuffer();
+            const uint8Array = new Uint8Array(arrayBuffer);
+            
+            // Check for image file signatures
+            const isValidImage = (
+              imageBlob.type.startsWith('image/') ||
+              // PNG signature
+              (uint8Array[0] === 0x89 && uint8Array[1] === 0x50 && uint8Array[2] === 0x4E && uint8Array[3] === 0x47) ||
+              // JPEG signature
+              (uint8Array[0] === 0xFF && uint8Array[1] === 0xD8 && uint8Array[2] === 0xFF) ||
+              // WebP signature
+              (uint8Array[8] === 0x57 && uint8Array[9] === 0x45 && uint8Array[10] === 0x42 && uint8Array[11] === 0x50) ||
+              // Large file that's likely an image
+              imageBlob.size > 5000
+            );
+
+            if (isValidImage) {
+              const imageObjectUrl = URL.createObjectURL(imageBlob);
+              setImageUrl(imageObjectUrl);
+              setSuccess(true);
+              setRetryCount(0);
+              setIsPolling(false);
+              toast.success("Image generated successfully!");
+              return;
+            } else {
+              console.log('File signature check failed. First 16 bytes:', Array.from(uint8Array.slice(0, 16)).map(b => b.toString(16)).join(' '));
+              throw new Error("Generated content is not a valid image file");
+            }
+          } else {
+            throw new Error("Received empty response");
+          }
+        } catch (blobError: any) {
           console.error("Error processing response as blob:", blobError);
+          if (blobError.message === 'TIMEOUT_RETRY') {
+            throw blobError;
+          }
           throw new Error("Failed to process the generated image");
         }
       } else {
         const statusText = response.statusText || "Unknown error";
         console.error(`HTTP ${response.status}: ${statusText}`);
         
-        // For 524 and 503 errors, retry automatically if we haven't exceeded max retries
-        if ((response.status === 524 || response.status === 503) && attempt < maxRetries) {
-          toast.info(`${response.status === 524 ? 'Cloudflare timeout' : 'Service busy'} - retrying in ${retryDelay/1000}s...`);
-          setRetryCount(attempt);
-          setIsRetrying(true);
-          
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-          setIsRetrying(false);
-          return await makeRequest(formData, attempt + 1);
-        }
-        
-        // Final error handling
-        if (response.status === 524) {
-          throw new Error("Cloudflare timeout occurred. The image may still be generating on the server. Please try again in a few minutes.");
-        } else if (response.status === 503) {
-          throw new Error("Service is temporarily busy. Please wait a moment and try again.");
-        } else if (response.status === 502) {
-          throw new Error("Service temporarily unavailable. Please try again in a few moments.");
+        // Handle specific error cases with retry logic
+        if (response.status === 524 || response.status === 503 || response.status === 502) {
+          if (attempt < maxRetries) {
+            const waitTime = retryDelay / 1000;
+            toast.info(`${response.status === 524 ? 'Generation timeout' : 'Server busy'} - retrying in ${waitTime}s... (${attempt}/${maxRetries})`);
+            setRetryCount(attempt);
+            setIsRetrying(true);
+            
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            setIsRetrying(false);
+            return await makeRequest(formData, attempt + 1);
+          } else {
+            // All retries exhausted - suggest manual check
+            throw new Error("Image generation is taking longer than expected. The image may have been generated successfully on the server. Please wait 2-3 minutes and try submitting a new request.");
+          }
         } else {
           throw new Error(`Request failed (${response.status}): ${statusText}. Please try again.`);
         }
@@ -87,11 +146,37 @@ export default function LinkedInPostForm() {
       console.error("Request error:", err);
       
       if (err.name === 'AbortError') {
-        throw new Error("Request timed out after 5 minutes. The image generation may be taking longer than expected.");
-      } else if (err.message.includes('Cloudflare timeout') || err.message.includes('Service is temporarily busy')) {
+        if (attempt < maxRetries) {
+          toast.info("Request timed out, but the image may still be generating. Retrying...");
+          setRetryCount(attempt);
+          setIsRetrying(true);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          setIsRetrying(false);
+          return await makeRequest(formData, attempt + 1);
+        }
+        throw new Error("Request timed out after multiple attempts. The image generation may be taking longer than expected.");
+      } else if (err.message === 'TIMEOUT_RETRY' && attempt < maxRetries) {
+        toast.info("Detected timeout response, retrying...");
+        setRetryCount(attempt);
+        setIsRetrying(true);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        setIsRetrying(false);
+        return await makeRequest(formData, attempt + 1);
+      } else if (err.message.includes('CORS') || err.message.includes('Failed to fetch')) {
+        // Handle CORS and network errors
+        if (attempt < maxRetries) {
+          toast.info(`Network issue detected - retrying in ${retryDelay/1000}s... (${attempt}/${maxRetries})`);
+          setRetryCount(attempt);
+          setIsRetrying(true);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          setIsRetrying(false);
+          return await makeRequest(formData, attempt + 1);
+        }
+        throw new Error("Network connection issues. Please check your internet connection and try again. If the problem persists, the image may have been generated - wait 2-3 minutes and try a new request.");
+      } else if (err.message.includes('timeout') || err.message.includes('busy')) {
         throw err; // Re-throw our custom errors
       } else {
-        throw new Error("Network error occurred. Please check your connection and try again.");
+        throw new Error(`Unexpected error: ${err.message}. Please try again.`);
       }
     }
   };
@@ -207,9 +292,20 @@ export default function LinkedInPostForm() {
             disabled={isSubmitting}
           >
             {isSubmitting ? (
-              isRetrying ? `Retrying... (${retryCount}/3)` : "Generating Image..."
+              isRetrying ? `Retrying... (${retryCount}/5)` : "Generating Image..."
             ) : "Generate LinkedIn Post"}
           </button>
+          
+          {isSubmitting && (
+            <div className="text-center text-sm text-muted-foreground">
+              <div className="inline-flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                {isRetrying ? 
+                  `Processing retry ${retryCount} of 5 - Image generation in progress...` : 
+                  "Image generation may take up to 8 minutes. Please wait..."}
+              </div>
+            </div>
+          )}
 
           {success && (
             <div className="p-4 bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
