@@ -37,18 +37,25 @@ export default function LinkedInPostForm() {
         toast.info(`Retry attempt ${attempt}/${maxRetries} - Image is being generated...`);
       }
 
-      // Enhanced fetch with additional headers to help with CORS and caching
+      // Create fresh FormData for each attempt to prevent corruption
+      const freshFormData = new FormData();
+      for (const [key, value] of formData.entries()) {
+        freshFormData.append(key, value);
+      }
+
+      // Enhanced fetch with preflight-friendly headers
       const response = await fetch(
         "https://zylo-11.app.n8n.cloud/webhook-test/97b30150-ecdc-42cb-8148-1cab2445cb01",
         {
           method: "POST",
-          body: formData,
+          body: freshFormData,
           signal: controller.signal,
-          mode: 'cors', // Explicitly set CORS mode
-          credentials: 'omit', // Don't send credentials that might cause CORS issues
+          mode: 'cors',
+          credentials: 'omit',
           headers: {
-            'Accept': 'image/*,*/*', // Prefer images but accept anything
-            'Cache-Control': 'no-cache', // Prevent caching issues
+            // Remove problematic headers that might cause preflight issues
+            'Accept': '*/*',
+            // Don't set Content-Type - let browser set it for FormData
           },
         }
       );
@@ -137,6 +144,15 @@ export default function LinkedInPostForm() {
           } else {
             // All retries exhausted - suggest manual check
             throw new Error("Image generation is taking longer than expected. The image may have been generated successfully on the server. Please wait 2-3 minutes and try submitting a new request.");
+          }
+        } else if (response.status === 404) {
+          // Handle 404 errors that occur on subsequent requests
+          if (attempt === 1) {
+            // If it's the first attempt and we get 404, the webhook might be down
+            throw new Error("Webhook endpoint not found. Please check if the n8n workflow is active and the URL is correct.");
+          } else {
+            // If it's a retry attempt, don't retry 404s as they're unlikely to resolve
+            throw new Error("Subsequent request failed with 404. The workflow may have been deactivated. Please try submitting a completely new request.");
           }
         } else {
           throw new Error(`Request failed (${response.status}): ${statusText}. Please try again.`);
