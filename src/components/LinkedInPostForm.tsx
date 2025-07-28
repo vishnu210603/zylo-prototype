@@ -191,10 +191,14 @@ export default function LinkedInPostForm() {
     setIsRetrying(false);
 
     const formData = new FormData(e.currentTarget);
+    const formElement = e.currentTarget; // Store reference before async operations
 
     try {
       await makeRequest(formData);
-      e.currentTarget.reset();
+      // Only reset if form element still exists
+      if (formElement && formElement.reset) {
+        formElement.reset();
+      }
     } catch (err: any) {
       setError(err.message);
       toast.error("Generation failed");
