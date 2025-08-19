@@ -1,7 +1,7 @@
-// src/app/components/InspirationParallax.tsx
 'use client';
 
 import React, { useState } from 'react';
+import styles from './InspirationSection.module.css';
 
 const inspirationData = [
     {
@@ -13,11 +13,19 @@ const inspirationData = [
         prompt: 'Refer to the image provided and generate better result for instagram result (no adult content) and use indian models',
     },
     {
-        image: '/resources/SC3.png',
+        image: '/resources/Beekend-1.png',
+        prompt: 'Use the product sample (bra) in the image to create Vogue styled photoshoot with beach background and a pet dog with the model. Do not make any changes to the product. Use Indian models',
+    },
+    {
+        image: '/resources/Beekend-2.png',
+        prompt: 'Use the product sample (bra) in the image to create Vogue styled photoshoot with beach background and a pet dog with the model. Do not make any changes to the product. Use Indian models',
+    },
+    {
+        image: '/resources/Beekend-3.png',
         prompt: 'Cool photoshoot model in the sense of vogue style to attract female audience and use indian model with a bit healthy and curvy body',
     },
     {
-        image: '/resources/SC4.png',
+        image: '/resources/Beekend-4.png',
         prompt: 'Use the product sample (bra) in the image to create Vogue styled photoshoot with beach background and a pet dog with the model. Do not make any changes to the product. Use Indian models',
     },
     {
@@ -51,7 +59,7 @@ const InspirationSection = () => {
 
                 {/* Auto Scrolling Strip */}
                 <div className="relative w-full h-[350px] overflow-hidden">
-                    <div className="w-fit flex gap-6 animate-marquee whitespace-nowrap">
+                    <div className={`w-fit flex gap-6 ${styles.animateMarquee} whitespace-nowrap`}>
                         {doubledData.map((item, index) => (
                             <div
                                 key={`inspiration-${index}`}
@@ -115,21 +123,6 @@ const InspirationSection = () => {
                     </div>
                 </div>
             )}
-
-            <style jsx>{`
-        @keyframes marquee {
-          0% {
-            transform: translateX(0%);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
-        }
-
-        .animate-marquee {
-          animation: marquee 30s linear infinite;
-        }
-      `}</style>
         </section>
     );
 };
