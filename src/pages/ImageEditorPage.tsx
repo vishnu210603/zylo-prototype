@@ -162,61 +162,73 @@ export default function ImageEditorPage() {
       </div>
 
       {/* Main Content */}
-      <div className="min-h-screen flex justify-center items-start lg:items-center pt-[120px] lg:pt-0 px-4">
-        <div className="flex flex-col lg:flex-row items-center gap-6 bg-white p-6 rounded-2xl shadow-xl border w-full max-w-5xl">
+      <div className="min-h-[calc(100vh-80px)] flex flex-col items-center pt-20 pb-10 px-4">
+        <div className="flex flex-col lg:flex-row items-stretch gap-8 w-full max-w-6xl h-[calc(100vh-200px)]">
           {/* Image Preview */}
-          <div className={`relative ${getAspectClass()} rounded-xl overflow-hidden border bg-white shadow`}>
-            <img
-              src={imageUrl}
-              alt="Preview"
-              className="w-full h-full object-cover cursor-zoom-in"
-              onClick={() => setShowExpandedImage(true)}
-              draggable={false}
-            />
+          <div className="flex-1 flex flex-col min-h-0">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">Image Preview</h3>
+            <div className="relative flex-1 rounded-xl overflow-hidden border-2 border-gray-100 bg-white shadow-lg min-h-0">
+              <img
+                src={imageUrl}
+                alt="Preview"
+                className="w-full h-full object-contain cursor-zoom-in p-2"
+                onClick={() => setShowExpandedImage(true)}
+                draggable={false}
+              />
+            </div>
           </div>
 
           {/* Caption Editor */}
-          <div className={`relative ${getAspectClass()} bg-[#f4f6fb] rounded-xl p-6 shadow border flex flex-col w-full`}>
-            <div className="mb-4 text-gray-700 font-medium flex justify-between items-center">
-              <span className="font-bold text-gray-900">Caption</span>
-              <button
-                onClick={() => setShowScheduler(true)}
-                className="transition-all hover:scale-105 cursor-pointer"
-                title={isScheduled ? 'Edit Schedule' : 'Schedule Post'}
-              >
-                {isScheduled ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 11l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 17H9v-3z" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                )}
-              </button>
-            </div>
-
-            <div
-              ref={captionRef}
-              contentEditable
-              suppressContentEditableWarning
-              className="flex-1 w-full bg-white rounded-lg px-4 py-3 text-sm leading-relaxed text-gray-800 border border-dashed border-[#d0d7e5] focus:outline-none overflow-auto whitespace-pre-wrap break-words"
-              onFocus={() => setIsEditing(true)}
-              onBlur={() => setIsEditing(false)}
-              onInput={(e) => setCaption(e.currentTarget.textContent || '')}
-              dangerouslySetInnerHTML={{ __html: caption }}
-            />
-
-            {isEditing && (
-              <div className="mt-4 flex justify-end">
-                <Button
-                  onClick={() => setIsEditing(false)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+          <div className="flex-1 flex flex-col min-h-0">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">Caption Editor</h3>
+            <div className="relative flex-1 bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col min-h-0 overflow-auto">
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+                <span className="text-gray-800 font-medium">Write your caption</span>
+                <button
+                  onClick={() => setShowScheduler(true)}
+                  className="p-2 rounded-full hover:bg-gray-50 transition-colors"
+                  title={isScheduled ? 'Edit Schedule' : 'Schedule Post'}
                 >
-                  Done
+                  {isScheduled ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 11l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 17H9v-3z" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+
+              <div
+                ref={captionRef}
+                contentEditable
+                suppressContentEditableWarning
+                className="flex-1 w-full p-4 text-base leading-relaxed text-gray-700 focus:outline-none overflow-auto whitespace-pre-wrap break-words scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
+                onFocus={() => setIsEditing(true)}
+                onBlur={() => setIsEditing(false)}
+                onInput={(e) => setCaption(e.currentTarget.textContent || '')}
+                dangerouslySetInnerHTML={{ __html: caption }}
+              />
+
+              <div className="p-3 border-t border-gray-100 flex justify-end">
+                {isScheduled && (
+                  <div className="flex items-center mr-auto text-sm text-green-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Scheduled
+                  </div>
+                )}
+                <Button
+                  onClick={() => setIsEditing(!isEditing)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6"
+                >
+                  {isEditing ? 'Save' : 'Edit'}
                 </Button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
