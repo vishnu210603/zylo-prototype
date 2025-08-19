@@ -49,7 +49,7 @@ const TopNavbar = () => {
     };
 
     return (
-        <nav className="bg-gradient-to-r from-blue-600/10 to-blue-500/10 text-white shadow-md">
+        <nav className="bg-white text-white shadow-md">
             <div className="container mx-auto px-4 lg:px-6 py-3">
                 <div className="flex items-center justify-between">
                     <a href="/">

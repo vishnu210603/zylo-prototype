@@ -57,29 +57,24 @@ export default function ImagePreview({
     setIsZoomed(true);
   };
 
-  const handleShare = async (e: React.MouseEvent) => {
+  const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
     if (!imageUrl) return;
     
-    try {
-      if (navigator.share) {
-        // For mobile devices
-        const response = await fetch(imageUrl);
-        const blob = await response.blob();
-        const file = new File([blob], 'generated-image.png', { type: 'image/png' });
-        
-        await navigator.share({
-          title: 'Generated Image',
-          text: 'Check out this image I generated!',
-          files: [file],
-        });
-      } else {
-        // Fallback for desktop
-        setShowShareOptions(!showShareOptions);
-      }
-    } catch (error) {
-      console.error('Error sharing:', error);
+    // On mobile, use the Web Share API if available
+    if (navigator.share) {
+      navigator.share({
+        title: 'Generated Image',
+        text: 'Check out this image I generated!',
+        url: imageUrl,
+      }).catch(err => {
+        console.log('Share was cancelled or failed:', err);
+        // Fallback to opening in new tab if share is cancelled or fails
+        window.open(imageUrl, '_blank');
+      });
+    } else {
+      // On desktop, just open in new tab
+      window.open(imageUrl, '_blank');
     }
   };
 
@@ -476,7 +471,7 @@ export default function ImagePreview({
                   className="p-4 rounded-2xl text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors flex items-center justify-center first:rounded-t-[1.5rem] last:rounded-b-[1.5rem]"
                   aria-label="AirDrop"
                 >
-                  <Airplay className="h-5 w-5" />
+                  <SiAirplayaudio className="h-5 w-5" />
                 </button>
 
                 <button
